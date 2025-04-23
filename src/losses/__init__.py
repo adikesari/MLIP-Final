@@ -3,6 +3,7 @@ from .common import L1Loss, MSELoss, FeatureLoss, PerceptualLoss
 from .det import DETLoss
 from .gan import GANLoss
 from .seg import AUXCELoss
+from .deblur import DeblurLoss
 
 def build_loss(opt_loss, logger):
     """Build loss from options.
@@ -13,3 +14,8 @@ def build_loss(opt_loss, logger):
     logger.write(f'Loss {loss_type} is created')
     
     return loss
+
+__all__ = [
+    'DeblurLoss',
+    # ... existing code ...
+]

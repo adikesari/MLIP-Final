@@ -160,6 +160,25 @@ class SimpleGate(nn.Module):
         return x1 * x2
 
 
+class MotionAttention(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, x):
+        # Extract motion features
+        motion_feat = self.conv1(x)
+        motion_feat = F.relu(motion_feat)
+        motion_feat = self.conv2(motion_feat)
+        
+        # Generate attention map
+        attention = self.sigmoid(motion_feat)
+        
+        return x * attention
+
+
 class NAFBlock(nn.Module):
     def __init__(self, c, DW_Expand=2, FFN_Expand=2, drop_out_rate=0.):
         super().__init__()
@@ -168,6 +187,9 @@ class NAFBlock(nn.Module):
         self.conv2 = nn.Conv2d(in_channels=dw_channel, out_channels=dw_channel, kernel_size=3, padding=1, stride=1, groups=dw_channel,
                                bias=True)
         self.conv3 = nn.Conv2d(in_channels=dw_channel // 2, out_channels=c, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
+        
+        # Motion attention
+        self.motion_attention = MotionAttention(dw_channel // 2)
         
         # Simplified Channel Attention
         self.sca = nn.Sequential(
@@ -198,32 +220,33 @@ class NAFBlock(nn.Module):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.sg(x)
-        x = x * self.sca(x)
+        
+        # Apply motion attention
+        x = self.motion_attention(x)
+        
+        x = self.sca(x) * x
         x = self.conv3(x)
 
         x = self.dropout1(x)
 
         y = inp + x * self.beta
 
-        x = self.conv4(self.norm2(y))
+        x = self.norm2(y)
+        x = self.conv4(x)
         x = self.sg(x)
         x = self.conv5(x)
 
         x = self.dropout2(x)
-        
-        z = y + x * self.gamma
 
-        return z
+        return y + x * self.gamma
 
 
 class NAFNet(nn.Module):
-
-    def __init__(self, img_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[], return_feat=False):
+    def __init__(self, img_channel=3, width=32, middle_blk_num=12, enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2], return_feat=False):
         super().__init__()
-    
         self.return_feat = return_feat
-        self.intro = nn.Conv2d(img_channel, width, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
-        self.ending = nn.Conv2d(width, img_channel, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
+        self.intro = nn.Conv2d(in_channels=img_channel, out_channels=width, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
+        self.ending = nn.Conv2d(in_channels=width, out_channels=img_channel, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
 
         self.encoders = nn.ModuleList()
         self.decoders = nn.ModuleList()
@@ -264,19 +287,20 @@ class NAFNet(nn.Module):
 
         self.padder_size = 2 ** len(self.encoders)
 
-    def forward(self, inp, x_class):
-        feat = {}
+    def forward(self, inp):
+        B, C, H, W = inp.shape
+        inp = self.check_image_size(inp)
+
         x = self.intro(inp)
 
         encs = []
+
         for encoder, down in zip(self.encoders, self.downs):
             x = encoder(x)
             encs.append(x)
             x = down(x)
 
         x = self.middle_blks(x)
-        if self.return_feat:
-            feat['feat'] = x.clone()
 
         for decoder, up, enc_skip in zip(self.decoders, self.ups, encs[::-1]):
             x = up(x)
@@ -286,7 +310,14 @@ class NAFNet(nn.Module):
         x = self.ending(x)
         x = x + inp
 
-        return x, feat
+        return x[:, :, :H, :W]
+
+    def check_image_size(self, x):
+        _, _, h, w = x.size()
+        mod_pad_h = (self.padder_size - h % self.padder_size) % self.padder_size
+        mod_pad_w = (self.padder_size - w % self.padder_size) % self.padder_size
+        x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h))
+        return x
 
 
 class NAFNetLocal(Local_Base, NAFNet):

@@ -1,0 +1,98 @@
+name: sr4ir_deblur
+model_type: sr4ir_deblur
+scale: 4
+
+# Network configurations
+network_sr:
+  name: edsr
+  scale: 4
+  num_feat: 64
+  num_block: 16
+  res_scale: 1.0
+  rgb_mean: [0.4488, 0.4371, 0.4040]
+  rgb_std: [1.0, 1.0, 1.0]
+
+network_deblur:
+  name: nafnet
+  img_channel: 3
+  width: 32
+  middle_blk_num: 12
+  enc_blk_nums: [2, 2, 4, 8]
+  dec_blk_nums: [2, 2, 2, 2]
+
+# Training configurations
+train:
+  sr_is_trainable: true
+  deblur_is_trainable: true
+  optimizer:
+    type: adam
+    lr: 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+  
+  scheduler:
+    type: CosineAnnealingLR
+    T_max: 1000000
+    eta_min: 1e-7
+
+  total_iter: 1000000
+  batch_size: 16
+  num_workers: 4
+  print_freq: 100
+  save_freq: 5000
+  val_freq: 1000
+
+# Loss configurations
+criterion:
+  l1:
+    type: L1Loss
+    weight: 1.0
+  perceptual:
+    type: VGGPerceptualLoss
+    weight: 0.1
+    layers: [2, 7, 12, 21, 30]
+  tdp:
+    type: TDPLoss
+    weight: 0.1
+    layers: [2, 7, 12, 21, 30]
+
+# Dataset configurations
+datasets:
+  train:
+    name: deblur_train
+    type: DeblurDataset
+    l_resolution: 64
+    r_resolution: 256
+    batch_size: 16
+    num_workers: 4
+    use_shuffle: true
+    data_root: ./datasets/deblur/train
+    mean: [0.4488, 0.4371, 0.4040]
+    std: [1.0, 1.0, 1.0]
+
+  val:
+    name: deblur_val
+    type: DeblurDataset
+    l_resolution: 64
+    r_resolution: 256
+    batch_size: 1
+    num_workers: 4
+    use_shuffle: false
+    data_root: ./datasets/deblur/val
+    mean: [0.4488, 0.4371, 0.4040]
+    std: [1.0, 1.0, 1.0]
+
+# Path configurations
+path:
+  pretrain_network_sr: null
+  pretrain_network_deblur: null
+  strict_load: true
+  resume_state: null
+
+# Logging configurations
+logger:
+  print_freq: 100
+  save_checkpoint_freq: 5000
+  use_tb_logger: true
+  tb_logger:
+    log_dir: ./tb_logger/sr4ir_deblur 
