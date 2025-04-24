@@ -49,6 +49,10 @@ class SR4IRDeblurModel(BaseModel):
         self.psnr_log_path = os.path.join('experiments', opt['model_type'], opt['name'], 'psnr_results.txt')
         with open(self.psnr_log_path, 'w') as f:
             f.write('Image Name,PSNR\n')
+        
+        # Set random seed for CQMix
+        torch.manual_seed(100)
+        np.random.seed(100)
 
     def set_mode(self, mode):
         if mode == 'train':
@@ -71,8 +75,11 @@ class SR4IRDeblurModel(BaseModel):
         x_sr = self.net_sr(x_up)
         
         if target is not None:
-            # Create CQMix
+            # Create CQMix with fixed seed
             batch_size = x_sr.shape[0]
+            # Reset seed for each forward pass to ensure same mask
+            torch.manual_seed(100)
+            np.random.seed(100)
             mask = F.interpolate(
                 (torch.randn(batch_size, 1, 8, 8)).bernoulli_(p=0.5),
                 size=x_sr.shape[2:],
