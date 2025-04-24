@@ -25,10 +25,9 @@ train:
   sr_is_trainable: true
   deblur_is_trainable: true
   optimizer:
-    type: adam
+    type: AdamW
     lr: 1e-4
     weight_decay: 0
-    betas: [0.9, 0.99]
   
   scheduler:
     type: CosineAnnealingLR

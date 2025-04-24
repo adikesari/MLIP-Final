@@ -1,12 +1,16 @@
 import torch
-from base_model import BaseModel
+from ..base_model import BaseModel
 from ...archs import build_network
+from ...archs.common.bicubic_arch import BICUBIC
 
 class SR4IRDeblurModel(BaseModel):
     """Super-Resolution model for Image Deblurring."""
 
     def __init__(self, opt):
         super().__init__(opt)
+        
+        # define bicubic downsampling
+        self.net_down = self.model_to_device(BICUBIC(scale=1/self.scale), is_trainable=False)
         
         # define network up
         self.net_up = self.model_to_device(torch.nn.UpsamplingBilinear2d(scale_factor=self.scale), is_trainable=False)
@@ -35,8 +39,11 @@ class SR4IRDeblurModel(BaseModel):
             raise NotImplementedError(f"mode {mode} is not supported")
 
     def forward(self, x):
+        # Downsample input using bicubic
+        x_down = self.net_down(x)
+        
         # Upsample input
-        x_up = self.net_up(x)
+        x_up = self.net_up(x_down)
         
         # Super-resolution
         x_sr = self.net_sr(x_up)
