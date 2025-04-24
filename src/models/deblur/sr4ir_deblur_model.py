@@ -70,9 +70,8 @@ class SR4IRDeblurModel(BaseModel):
         # Super-resolution
         x_sr = self.net_sr(x_up)
         
-        # SR-to-HR comparison if target is provided
         if target is not None:
-            # Create CQMix mask
+            # Create CQMix
             batch_size = x_sr.shape[0]
             mask = F.interpolate(
                 (torch.randn(batch_size, 1, 8, 8)).bernoulli_(p=0.5),
@@ -88,46 +87,48 @@ class SR4IRDeblurModel(BaseModel):
             
             # Deblurring on concatenated input
             x_deblur = self.net_deblur(x_deblur_input)
+            
+            return x_deblur, x_sr, x_cqmix
         else:
             # Regular deblurring without CQMix
             x_deblur = self.net_deblur(x_sr)
-        
-        return x_deblur, x_sr, x_cqmix if target is not None else None
+            return x_deblur, x_sr, None
 
     def optimize_parameters(self, current_iter):
         # Forward pass
         self.output, self.sr_output, self.cqmix_output = self.forward(self.input, self.target)
         
-        # Calculate loss
+        # Calculate losses
         self.loss_dict = self.calculate_loss()
         
-        # Backward pass
-        self.optimizer.zero_grad()
-        self.loss_dict['total_loss'].backward()
-        self.optimizer.step()
+        # Backward pass for SR network
+        self.optimizer_sr.zero_grad()
+        sr_loss = self.loss_dict['sr_loss'] + self.loss_dict['tdp_loss']
+        sr_loss.backward(retain_graph=True)
+        self.optimizer_sr.step()
+        
+        # Backward pass for deblur network
+        self.optimizer_deblur.zero_grad()
+        deblur_loss = self.loss_dict['deblur_loss']
+        deblur_loss.backward()
+        self.optimizer_deblur.step()
         
         return self.loss_dict
 
     def calculate_loss(self):
         loss_dict = {}
         
-        # L1 loss for deblurred output
-        loss_dict['l1_loss'] = self.criterion['l1'](self.output, self.target)
-        
-        # L1 loss for SR output
+        # SR Network Losses
+        # Pixel loss between SR and HR
         loss_dict['sr_loss'] = self.criterion['l1'](self.sr_output, self.target)
         
-        # L1 loss for CQMix output
-        if self.cqmix_output is not None:
-            loss_dict['cqmix_loss'] = self.criterion['l1'](self.cqmix_output, self.target)
-        
-        # Perceptual loss
-        if 'perceptual' in self.criterion:
-            loss_dict['perceptual_loss'] = self.criterion['perceptual'](self.output, self.target)
-        
-        # TDP loss
+        # TDP loss between SR and HR features
         if 'tdp' in self.criterion:
-            loss_dict['tdp_loss'] = self.criterion['tdp'](self.output, self.target)
+            loss_dict['tdp_loss'] = self.criterion['tdp'](self.sr_output, self.target)
+        
+        # Deblur Network Losses
+        # Cross-entropy loss between deblurred output and target
+        loss_dict['deblur_loss'] = self.criterion['ce'](self.output, self.target)
         
         # Total loss
         loss_dict['total_loss'] = sum(loss_dict.values())
