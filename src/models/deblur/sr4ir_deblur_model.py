@@ -1,10 +1,20 @@
 import torch
 import torch.nn.functional as F
 import os
+import numpy as np
 from ..base_model import BaseModel
 from ...archs import build_network
 from ...archs.common.bicubic_arch import BICUBIC
 from ...utils.common import tensor2img
+
+def calculate_psnr(img1, img2):
+    """Calculate PSNR between two images."""
+    mse = np.mean((img1 - img2) ** 2)
+    if mse == 0:
+        return float('inf')
+    max_pixel = 255.0
+    psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
+    return psnr
 
 class SR4IRDeblurModel(BaseModel):
     """Super-Resolution model for Image Deblurring."""
@@ -34,6 +44,11 @@ class SR4IRDeblurModel(BaseModel):
         # Create output directory for test results in experiments folder
         self.test_output_dir = os.path.join('experiments', opt['model_type'], opt['name'], 'test_results')
         os.makedirs(self.test_output_dir, exist_ok=True)
+        
+        # Create log file for PSNR results
+        self.psnr_log_path = os.path.join('experiments', opt['model_type'], opt['name'], 'psnr_results.txt')
+        with open(self.psnr_log_path, 'w') as f:
+            f.write('Image Name,PSNR\n')
 
     def set_mode(self, mode):
         if mode == 'train':
@@ -115,6 +130,8 @@ class SR4IRDeblurModel(BaseModel):
     def test(self, data_loader, current_iter):
         """Test the model and save results."""
         self.set_mode('eval')
+        total_psnr = 0
+        num_images = 0
         
         for idx, data in enumerate(data_loader):
             self.input = data['blurry'].to(self.device)
@@ -123,26 +140,41 @@ class SR4IRDeblurModel(BaseModel):
             with torch.no_grad():
                 self.output, self.sr_output = self.forward(self.input)
             
-            # Save results
+            # Save results and calculate PSNR
             for i in range(self.input.size(0)):
                 img_name = os.path.splitext(os.path.basename(data['blurry_path'][i]))[0]
                 
-                # Save input (blurry) image
+                # Convert tensors to images
+                output_img = tensor2img(self.output[i])
+                target_img = tensor2img(self.target[i])
+                
+                # Calculate PSNR
+                psnr = calculate_psnr(output_img, target_img)
+                total_psnr += psnr
+                num_images += 1
+                
+                # Log PSNR
+                with open(self.psnr_log_path, 'a') as f:
+                    f.write(f'{img_name},{psnr:.2f}\n')
+                
+                # Save images
                 input_img = tensor2img(self.input[i])
                 input_path = os.path.join(self.test_output_dir, f'{img_name}_input.png')
                 input_img.save(input_path)
                 
-                # Save SR output
                 sr_img = tensor2img(self.sr_output[i])
                 sr_path = os.path.join(self.test_output_dir, f'{img_name}_sr.png')
                 sr_img.save(sr_path)
                 
-                # Save deblurred output
-                output_img = tensor2img(self.output[i])
                 output_path = os.path.join(self.test_output_dir, f'{img_name}_deblur.png')
                 output_img.save(output_path)
                 
-                # Save target (sharp) image
-                target_img = tensor2img(self.target[i])
                 target_path = os.path.join(self.test_output_dir, f'{img_name}_target.png')
-                target_img.save(target_path) 
+                target_img.save(target_path)
+        
+        # Calculate and log average PSNR
+        avg_psnr = total_psnr / num_images
+        with open(self.psnr_log_path, 'a') as f:
+            f.write(f'\nAverage PSNR: {avg_psnr:.2f}\n')
+        
+        print(f'Average PSNR: {avg_psnr:.2f} dB') 
