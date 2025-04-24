@@ -75,8 +75,8 @@ def main():
     process_voc_dataset(
         input_dir=os.path.join(voc_path, "JPEGImages"),
         output_dir=str(train_dir / "blurry_images"),
-        blur_lengths=[5, 7, 9, 11],
-        angles=[0, 45, 90, 135]
+        blur_lengths=[5, 9, 11],
+        angles=[0, 45, 90]
     )
     
     # Process validation set
