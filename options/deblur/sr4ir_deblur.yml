@@ -1,6 +1,10 @@
 name: sr4ir_deblur
 model_type: sr4ir_deblur
 scale: 4
+num_threads: 16
+print_freq: 100
+manual_seed: 100
+deterministic: true
 
 # Device configuration
 device: cuda
@@ -29,6 +33,12 @@ network_deblur:
 train:
   sr_is_trainable: true
   deblur_is_trainable: true
+  batch_size: 16
+  epoch: 30
+  save_freq: 10  # unit: epoch
+  eval_freq: 5
+  warmup_epoch: 3
+  
   optimizer_sr:
     type: AdamW
     lr: 1e-4
@@ -41,33 +51,41 @@ train:
     weight_decay: 0
     betas: [0.9, 0.999]
   
-  scheduler:
-    type: CosineAnnealingLR
-    T_max: 1000000
-    eta_min: 1e-7
-
-  total_iter: 1000000
-  batch_size: 16
-  num_workers: 4
-  print_freq: 100
-  save_freq: 5000
-  val_freq: 1000
-
-# Loss configurations
-criterion:
-  # SR Network Losses
-  l1:
-    type: L1Loss
-    weight: 0.6  # Pixel loss between SR and HR
-  tdp:
-    type: TDPLoss
-    weight: 0.4  # TDP loss between SR and HR features
-    layers: [2, 7, 12, 21, 30]
+  scheduler_sr:
+    type: CosineAnnealingRestartLR
+    periods: [2, 27]  # 1 for warmup
+    restart_weights: [1, 1]
+    eta_min: 1e-6
   
-  # Deblur Network Losses
-  ce:
-    type: CrossEntropyLoss
-    weight: 1.0  # Cross-entropy loss for deblurring
+  scheduler_deblur:
+    type: CosineAnnealingRestartLR
+    periods: [2, 27]  # 1 for warmup
+    restart_weights: [1, 1]
+    eta_min: 1e-6
+
+  # Phase 1 losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+  tdp_opt:
+    type: FeatureLoss
+    loss_weight: 1.0
+    criterion: l1
+    layer_weights:
+      '0': 0.5
+      '1': 0.5
+  
+  # Phase 2 losses
+  deblur_sr_opt:
+    type: L1Loss
+    loss_weight: 0.34
+  deblur_hr_opt:
+    type: L1Loss
+    loss_weight: 0.34
+  deblur_cqmix_opt:
+    type: L1Loss
+    loss_weight: 0.34
 
 # Dataset configurations
 datasets:

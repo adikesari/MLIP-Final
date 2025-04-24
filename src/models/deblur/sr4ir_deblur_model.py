@@ -53,6 +53,9 @@ class SR4IRDeblurModel(BaseModel):
         # Set random seed for CQMix
         torch.manual_seed(100)
         np.random.seed(100)
+        
+        # Initialize phase
+        self.current_phase = 1
 
     def set_mode(self, mode):
         if mode == 'train':
@@ -108,34 +111,46 @@ class SR4IRDeblurModel(BaseModel):
         # Calculate losses
         self.loss_dict = self.calculate_loss()
         
-        # Backward pass for SR network
-        self.optimizer_sr.zero_grad()
-        sr_loss = self.loss_dict['sr_loss'] + self.loss_dict['tdp_loss']
-        sr_loss.backward(retain_graph=True)
-        self.optimizer_sr.step()
+        if self.current_phase == 1:
+            # Phase 1: Train SR network
+            self.optimizer_sr.zero_grad()
+            phase1_loss = self.loss_dict['pixel_loss'] + self.loss_dict['tdp_loss']
+            phase1_loss.backward()
+            self.optimizer_sr.step()
+            
+            # Switch to phase 2 after warmup
+            if current_iter >= self.opt['train']['warmup_epoch'] * len(self.train_loader):
+                self.current_phase = 2
+                self.text_logger.write("Switching to Phase 2 training")
         
-        # Backward pass for deblur network
-        self.optimizer_deblur.zero_grad()
-        deblur_loss = self.loss_dict['deblur_loss']
-        deblur_loss.backward()
-        self.optimizer_deblur.step()
+        else:
+            # Phase 2: Train deblur network
+            self.optimizer_deblur.zero_grad()
+            phase2_loss = (self.loss_dict['deblur_sr_loss'] + 
+                         self.loss_dict['deblur_hr_loss'] + 
+                         self.loss_dict['deblur_cqmix_loss'])
+            phase2_loss.backward()
+            self.optimizer_deblur.step()
         
         return self.loss_dict
 
     def calculate_loss(self):
         loss_dict = {}
         
-        # SR Network Losses
-        # Pixel loss between SR and HR
-        loss_dict['sr_loss'] = self.criterion['l1'](self.sr_output, self.target)
+        if self.current_phase == 1:
+            # Phase 1 losses
+            # Pixel loss between SR and HR
+            loss_dict['pixel_loss'] = self.criterion['pixel_opt'](self.sr_output, self.target)
+            
+            # TDP loss between SR and HR features
+            loss_dict['tdp_loss'] = self.criterion['tdp_opt'](self.sr_output, self.target)
         
-        # TDP loss between SR and HR features
-        if 'tdp' in self.criterion:
-            loss_dict['tdp_loss'] = self.criterion['tdp'](self.sr_output, self.target)
-        
-        # Deblur Network Losses
-        # Cross-entropy loss between deblurred output and target
-        loss_dict['deblur_loss'] = self.criterion['ce'](self.output, self.target)
+        else:
+            # Phase 2 losses
+            # Deblur losses for SR, HR, and CQMix outputs
+            loss_dict['deblur_sr_loss'] = self.criterion['deblur_sr_opt'](self.output, self.target)
+            loss_dict['deblur_hr_loss'] = self.criterion['deblur_hr_opt'](self.output, self.target)
+            loss_dict['deblur_cqmix_loss'] = self.criterion['deblur_cqmix_opt'](self.output, self.target)
         
         # Total loss
         loss_dict['total_loss'] = sum(loss_dict.values())
