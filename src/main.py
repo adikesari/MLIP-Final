@@ -55,7 +55,7 @@ def main():
         if opt.get('calculate_cost'):
             model.calculate_cost()
         else:
-            model.test(data_loader_test, 0)  # Pass 0 as current_iter for testing
+            model.test(data_loader_test, 0)
     else:
         # Training mode
         if opt.get('train', False):
@@ -72,9 +72,17 @@ def main():
             for epoch in range(start_epoch, end_epoch+1):
                 if train_sampler is not None:
                     train_sampler.set_epoch(epoch)
+                
+                # Training
                 model.train_one_epoch(data_loader_train, train_sampler, epoch)
-                model.evaluate(data_loader_test, epoch)
-                model.save(epoch)
+                
+                # Evaluation
+                if epoch % opt['train']['eval_freq'] == 0:
+                    model.evaluate(data_loader_test, epoch)
+                
+                # Save checkpoint
+                if epoch % opt['train']['save_freq'] == 0:
+                    model.save(epoch)
                 
             total_time = time.time() - start_time
             total_time_str = str(datetime.timedelta(seconds=int(total_time)))

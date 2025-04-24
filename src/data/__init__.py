@@ -10,11 +10,11 @@ def load_data(opt):
     # Training dataset
     train_dataset = DeblurDataset(opt['datasets']['train'])
     train_sampler = None
-    if opt['distributed']:
+    if opt.get('distributed', False):
         train_sampler = data.distributed.DistributedSampler(train_dataset)
     train_loader = data.DataLoader(
         train_dataset,
-        batch_size=opt['datasets']['train']['batch_size'],
+        batch_size=opt['train']['batch_size'],
         shuffle=(train_sampler is None),
         num_workers=opt['datasets']['train']['num_workers'],
         sampler=train_sampler,
@@ -25,7 +25,7 @@ def load_data(opt):
     # Validation dataset
     val_dataset = DeblurDataset(opt['datasets']['val'])
     val_sampler = None
-    if opt['distributed']:
+    if opt.get('distributed', False):
         val_sampler = data.distributed.DistributedSampler(val_dataset)
     val_loader = data.DataLoader(
         val_dataset,
