@@ -83,17 +83,20 @@ class SR4IRDeblurModel(BaseModel):
             # Apply CQMix
             x_cqmix = x_sr * mask + target * (1 - mask)
             
-            # Deblurring on CQMix
-            x_deblur = self.net_deblur(x_cqmix)
+            # Concatenate all images for deblurring
+            x_deblur_input = torch.cat([x_cqmix, x_sr, target], dim=1)
+            
+            # Deblurring on concatenated input
+            x_deblur = self.net_deblur(x_deblur_input)
         else:
             # Regular deblurring without CQMix
             x_deblur = self.net_deblur(x_sr)
         
-        return x_deblur, x_sr
+        return x_deblur, x_sr, x_cqmix if target is not None else None
 
     def optimize_parameters(self, current_iter):
         # Forward pass
-        self.output, self.sr_output = self.forward(self.input, self.target)
+        self.output, self.sr_output, self.cqmix_output = self.forward(self.input, self.target)
         
         # Calculate loss
         self.loss_dict = self.calculate_loss()
@@ -113,6 +116,10 @@ class SR4IRDeblurModel(BaseModel):
         
         # L1 loss for SR output
         loss_dict['sr_loss'] = self.criterion['l1'](self.sr_output, self.target)
+        
+        # L1 loss for CQMix output
+        if self.cqmix_output is not None:
+            loss_dict['cqmix_loss'] = self.criterion['l1'](self.cqmix_output, self.target)
         
         # Perceptual loss
         if 'perceptual' in self.criterion:
@@ -138,7 +145,7 @@ class SR4IRDeblurModel(BaseModel):
             self.target = data['sharp'].to(self.device)
             
             with torch.no_grad():
-                self.output, self.sr_output = self.forward(self.input)
+                self.output, self.sr_output, self.cqmix_output = self.forward(self.input, self.target)
             
             # Save results and calculate PSNR
             for i in range(self.input.size(0)):
@@ -165,6 +172,11 @@ class SR4IRDeblurModel(BaseModel):
                 sr_img = tensor2img(self.sr_output[i])
                 sr_path = os.path.join(self.test_output_dir, f'{img_name}_sr.png')
                 sr_img.save(sr_path)
+                
+                if self.cqmix_output is not None:
+                    cqmix_img = tensor2img(self.cqmix_output[i])
+                    cqmix_path = os.path.join(self.test_output_dir, f'{img_name}_cqmix.png')
+                    cqmix_img.save(cqmix_path)
                 
                 output_path = os.path.join(self.test_output_dir, f'{img_name}_deblur.png')
                 output_img.save(output_path)
