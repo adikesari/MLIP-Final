@@ -20,25 +20,7 @@ This will:
 - Create blurred versions of the images
 - Save them to `datasets/deblur/train` and `datasets/deblur/val`
 
-## Dataset Structure
-
-The processed dataset will have the following structure:
-```
-datasets/
-├── VOC2012/
-│   └── VOCdevkit/
-│       └── VOC2012/
-│           └── JPEGImages/
-└── deblur/
-    ├── train/
-    │   └── [blurred images]
-    └── val/
-        └── [blurred images]
-```
-
 ## Blur Parameters
-
-The script applies motion blur with the following parameters:
 
 Training set:
 - Blur lengths: [5, 7, 9, 11] pixels
