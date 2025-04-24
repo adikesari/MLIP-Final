@@ -12,7 +12,18 @@ from data import load_data
 def main():
     # load opt and args from yaml
     opt, args = utils.common.parse_options()
-    opt = utils.common.init_distributed_mode(opt)
+    
+    # Set device
+    if opt.get('device') == 'cuda':
+        if not torch.cuda.is_available():
+            print('CUDA is not available, using CPU instead')
+            opt['device'] = 'cpu'
+        else:
+            torch.cuda.set_device(opt['gpu_ids'][0])
+    
+    # Initialize distributed training if needed
+    if opt.get('distributed', False):
+        opt = utils.common.init_distributed_mode(opt)
     
     # deterministic option for reproduction
     if opt.get('deterministic', False):
@@ -23,7 +34,7 @@ def main():
         
     # make model
     model = make_model(opt)
-    utils.common.copy_opt_file(args.opt, osp.join('experiments', opt['task'], opt['name']))
+    utils.common.copy_opt_file(args.opt, osp.join('experiments', opt['model_type'], opt['name']))
     
     # prepare data loader
     data_loader_train, data_loader_test, train_sampler, test_sampler = load_data(opt)
@@ -41,6 +52,8 @@ def main():
         start_time = time.time()
         
         for epoch in range(start_epoch, end_epoch+1):
+            if train_sampler is not None:
+                train_sampler.set_epoch(epoch)
             model.train_one_epoch(data_loader_train, train_sampler, epoch)
             model.evaluate(data_loader_test, epoch)
             model.save(epoch)

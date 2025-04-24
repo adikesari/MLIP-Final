@@ -2,6 +2,11 @@ name: sr4ir_deblur
 model_type: sr4ir_deblur
 scale: 4
 
+# Device configuration
+device: cuda
+distributed: false
+gpu_ids: [0]  # Use first GPU, modify this list to use multiple GPUs
+
 # Network configurations
 network_sr:
   name: edsr
@@ -28,6 +33,7 @@ train:
     type: AdamW
     lr: 1e-4
     weight_decay: 0
+    betas: [0.9, 0.999]
   
   scheduler:
     type: CosineAnnealingLR
@@ -46,6 +52,9 @@ criterion:
   l1:
     type: L1Loss
     weight: 1.0
+  sr_loss:
+    type: L1Loss
+    weight: 0.5
   perceptual:
     type: VGGPerceptualLoss
     weight: 0.1

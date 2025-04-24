@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from ..base_model import BaseModel
 from ...archs import build_network
 from ...archs.common.bicubic_arch import BICUBIC
@@ -38,7 +39,7 @@ class SR4IRDeblurModel(BaseModel):
         else:
             raise NotImplementedError(f"mode {mode} is not supported")
 
-    def forward(self, x):
+    def forward(self, x, target=None):
         # Downsample input using bicubic
         x_down = self.net_down(x)
         
@@ -48,14 +49,30 @@ class SR4IRDeblurModel(BaseModel):
         # Super-resolution
         x_sr = self.net_sr(x_up)
         
-        # Deblurring
-        x_deblur = self.net_deblur(x_sr)
+        # SR-to-HR comparison if target is provided
+        if target is not None:
+            # Create CQMix mask
+            batch_size = x_sr.shape[0]
+            mask = F.interpolate(
+                (torch.randn(batch_size, 1, 8, 8)).bernoulli_(p=0.5),
+                size=x_sr.shape[2:],
+                mode='nearest'
+            ).to(x_sr.device)
+            
+            # Apply CQMix
+            x_cqmix = x_sr * mask + target * (1 - mask)
+            
+            # Deblurring on CQMix
+            x_deblur = self.net_deblur(x_cqmix)
+        else:
+            # Regular deblurring without CQMix
+            x_deblur = self.net_deblur(x_sr)
         
-        return x_deblur
+        return x_deblur, x_sr
 
     def optimize_parameters(self, current_iter):
         # Forward pass
-        self.output = self.forward(self.input)
+        self.output, self.sr_output = self.forward(self.input, self.target)
         
         # Calculate loss
         self.loss_dict = self.calculate_loss()
@@ -70,8 +87,11 @@ class SR4IRDeblurModel(BaseModel):
     def calculate_loss(self):
         loss_dict = {}
         
-        # L1 loss
+        # L1 loss for deblurred output
         loss_dict['l1_loss'] = self.criterion['l1'](self.output, self.target)
+        
+        # L1 loss for SR output
+        loss_dict['sr_loss'] = self.criterion['l1'](self.sr_output, self.target)
         
         # Perceptual loss
         if 'perceptual' in self.criterion:
