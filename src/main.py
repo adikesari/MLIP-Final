@@ -76,6 +76,7 @@ def main():
                 # Training
                 model.train_one_epoch(data_loader_train, train_sampler, epoch)
                 
+            
                 # Evaluation
                 if epoch % opt['train']['eval_freq'] == 0:
                     model.evaluate(data_loader_test, epoch)

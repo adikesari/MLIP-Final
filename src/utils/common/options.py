@@ -33,10 +33,15 @@ def parse_options():
     # set task
     task = opt.get('task', None)
     if task is None:
-        task = args.opt.split('/')[1]
-        if not task in ['cls', 'det', 'seg']:
-            raise NotImplementedError("task should be specided in [cls, det, seg]")
-        opt['task'] = task
+        # Extract task from the path structure: options/task/model.yml
+        path_parts = args.opt.split('/')
+        if len(path_parts) >= 2:
+            task = path_parts[1]
+            if task not in ['sr', 'deblur', 'denoise', 'cls', 'det', 'seg']:
+                raise NotImplementedError("task should be specified in [sr, deblur, denoise, cls, det, seg]")
+            opt['task'] = task
+        else:
+            raise ValueError("Invalid option file path structure. Expected: options/task/model.yml")
         
     # test_only
     if args.test_only:
