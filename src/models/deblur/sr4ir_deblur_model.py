@@ -1,5 +1,5 @@
 import torch
-from ..base_model import BaseModel
+from base_model import BaseModel
 from ...archs import build_network
 
 class SR4IRDeblurModel(BaseModel):
