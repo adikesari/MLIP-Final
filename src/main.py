@@ -13,7 +13,7 @@ from data import load_data
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--opt', type=str, required=True, help='Path to option YAML file.')
+    parser.add_argument('-opt', type=str, required=True, help='Path to option YAML file.')
     parser.add_argument('--test_only', action='store_true', help='Run testing only')
     args = parser.parse_args()
     

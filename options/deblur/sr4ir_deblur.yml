@@ -1,26 +1,25 @@
 name: sr4ir_deblur
 model_type: sr4ir_deblur
-scale: 4
 num_threads: 16
-print_freq: 100
+print_freq: 100  # unit: iter
 manual_seed: 100
+scale: 4
 deterministic: true
+# test_only: true
 
-# Device configuration
-device: cuda
-distributed: false
-gpu_ids: [0]  # Use first GPU, modify this list to use multiple GPUs
+# data and augmentation
+data:
+  path: datasets/deblur
+  format: deblur
+  aspect_ratio_group_factor: 3
+  data_augmentation: hflip
+  is_voc: false
 
-# Network configurations
+# network specs
 network_sr:
   name: edsr
-  scale: 4
-  num_feat: 64
-  num_block: 16
-  res_scale: 1.0
-  rgb_mean: [0.4488, 0.4371, 0.4040]
-  rgb_std: [1.0, 1.0, 1.0]
-
+  n_blocks: 16
+  n_feats: 64
 network_deblur:
   name: nafnet
   img_channel: 9  # 3 channels each for SR, HR, and CQMix
@@ -29,96 +28,80 @@ network_deblur:
   enc_blk_nums: [2, 2, 4, 8]
   dec_blk_nums: [2, 2, 2, 2]
 
-# Training configurations
-train:
-  sr_is_trainable: true
-  deblur_is_trainable: true
-  batch_size: 16
+# path for pretrained model
+path:
+  network_sr: experiments/pretrained_models/edsr_baseline_x4-6b446fab.pt
+  network_deblur: null
+
+# training config
+train:  
+  batch_size: 16  # 1 GPU
   epoch: 30
   save_freq: 10  # unit: epoch
   eval_freq: 5
   warmup_epoch: 3
-  
-  optimizer_sr:
+
+  # optimizer
+  optim_sr:
     type: AdamW
-    lr: 1e-4
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.999]
+  optim_deblur:
+    type: AdamW
+    lr: !!float 1e-4
     weight_decay: 0
     betas: [0.9, 0.999]
   
-  optimizer_deblur:
-    type: AdamW
-    lr: 1e-4
-    weight_decay: 0
-    betas: [0.9, 0.999]
-  
+  # scheduler
   scheduler_sr:
     type: CosineAnnealingRestartLR
     periods: [2, 27]  # 1 for warmup
     restart_weights: [1, 1]
-    eta_min: 1e-6
-  
+    eta_min: !!float 1e-6
   scheduler_deblur:
     type: CosineAnnealingRestartLR
     periods: [2, 27]  # 1 for warmup
     restart_weights: [1, 1]
-    eta_min: 1e-6
+    eta_min: !!float 1e-6
 
-  # Phase 1 losses
+  # phase 1 losses
   pixel_opt:
     type: L1Loss
-    loss_weight: 1.0
+    loss_weight: !!float 1.0
     reduction: mean
   tdp_opt:
     type: FeatureLoss
-    loss_weight: 1.0
+    loss_weight: !!float 1.0
     criterion: l1
     layer_weights:
       '0': 0.5
       '1': 0.5
   
-  # Phase 2 losses
+  # phase 2 losses
   deblur_sr_opt:
     type: L1Loss
-    loss_weight: 0.34
+    loss_weight: !!float 0.34
   deblur_hr_opt:
     type: L1Loss
-    loss_weight: 0.34
+    loss_weight: !!float 0.34
   deblur_cqmix_opt:
     type: L1Loss
-    loss_weight: 0.34
+    loss_weight: !!float 0.34
 
-# Dataset configurations
-datasets:
-  train:
-    name: deblur_train
-    type: DeblurDataset
-    l_resolution: 64
-    r_resolution: 256
-    batch_size: 16
-    num_workers: 4
-    use_shuffle: true
-    data_root: ./datasets/deblur/train
-    mean: [0.4488, 0.4371, 0.4040]
-    std: [1.0, 1.0, 1.0]
+# training config
+test:  
+  batch_size: 1
+  visualize: true
+  calculate_lpips: true
 
-  val:
-    name: deblur_val
-    type: DeblurDataset
-    l_resolution: 64
-    r_resolution: 256
-    batch_size: 1
-    num_workers: 4
-    use_shuffle: false
-    data_root: ./datasets/deblur/val
-    mean: [0.4488, 0.4371, 0.4040]
-    std: [1.0, 1.0, 1.0]
+# DDP setting
+dist_url: env:://
 
-# Path configurations
-path:
-  pretrain_network_sr: null
-  pretrain_network_deblur: null
-  strict_load: true
-  resume_state: null
+# Device configuration
+device: cuda
+distributed: false
+gpu_ids: [0]  # Use first GPU, modify this list to use multiple GPUs
 
 # Logging configurations
 logger:
