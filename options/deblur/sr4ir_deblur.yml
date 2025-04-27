@@ -3,9 +3,9 @@ model_type: sr4ir_deblur
 num_threads: 16
 print_freq: 100  # unit: iter
 manual_seed: 100
-scale: 4
+scale: 8
 deterministic: true
-# test_only: true
+#test_only: true
 
 # data and augmentation
 data:
@@ -14,41 +14,82 @@ data:
   aspect_ratio_group_factor: 3
   data_augmentation: hflip
   is_voc: false
+  mean: [0.4488, 0.4371, 0.4040]
+  std: [1.0, 1.0, 1.0]
+  train:
+    name: deblur_train
+    type: DeblurDataset
+    batch_size: 4
+    num_workers: 4
+    use_shuffle: true
+    data_root: ./datasets/deblur/train
+  val:
+    name: deblur_val
+    type: DeblurDataset
+    batch_size: 1
+    num_workers: 4
+    use_shuffle: false
+    data_root: ./datasets/deblur/val
+
+# dataset configurations
+datasets:
+  train:
+    name: deblur_train
+    type: DeblurDataset
+    batch_size: 4
+    num_workers: 4
+    use_shuffle: true
+    data_root: ./datasets/deblur/train
+    mean: [0.4488, 0.4371, 0.4040]
+    std: [1.0, 1.0, 1.0]
+
+  val:
+    name: deblur_val
+    type: DeblurDataset
+    batch_size: 1
+    num_workers: 4
+    use_shuffle: false
+    data_root: ./datasets/deblur/val
+    mean: [0.4488, 0.4371, 0.4040]
+    std: [1.0, 1.0, 1.0]
 
 # network specs
 network_sr:
   name: edsr
   n_blocks: 16
   n_feats: 64
+
+
 network_deblur:
   name: nafnet
   img_channel: 9  # 3 channels each for SR, HR, and CQMix
-  width: 32
-  middle_blk_num: 12
-  enc_blk_nums: [2, 2, 4, 8]
-  dec_blk_nums: [2, 2, 2, 2]
+  width: 16
+  middle_blk_num: 6
+  enc_blk_nums: [1, 1, 2, 4]
+  dec_blk_nums: [1, 1, 1, 1]
+  return_feat: true
 
 # path for pretrained model
 path:
-  network_sr: experiments/pretrained_models/edsr_baseline_x4-6b446fab.pt
+  network_sr: experiments/pretrained_models/edsr_baseline_x8.pt
   network_deblur: null
 
 # training config
 train:  
-  batch_size: 16  # 1 GPU
+  batch_size: 4  # 1 GPU
   epoch: 30
   save_freq: 10  # unit: epoch
-  eval_freq: 5
+  eval_freq: 10
   warmup_epoch: 3
 
   # optimizer
   optim_sr:
-    type: AdamW
+    type: Adam
     lr: !!float 1e-4
     weight_decay: 0
     betas: [0.9, 0.999]
   optim_deblur:
-    type: AdamW
+    type: Adam
     lr: !!float 1e-4
     weight_decay: 0
     betas: [0.9, 0.999]
@@ -71,12 +112,15 @@ train:
     loss_weight: !!float 1.0
     reduction: mean
   tdp_opt:
-    type: FeatureLoss
-    loss_weight: !!float 1.0
-    criterion: l1
+    type: PerceptualLoss
+    perceptual_weight: !!float 1.0
+    style_weight: !!float 0.0
     layer_weights:
-      '0': 0.5
-      '1': 0.5
+      conv5_4: 1.0
+    vgg_type: vgg19
+    use_input_norm: true
+    range_norm: false
+    criterion: l1
   
   # phase 2 losses
   deblur_sr_opt:
@@ -96,7 +140,12 @@ test:
   calculate_lpips: true
 
 # DDP setting
-dist_url: env:://
+dist_url: env://
+dist: false
+world_size: 1
+rank: 0
+find_unused_parameters: false
+broadcast_buffers: false
 
 # Device configuration
 device: cuda

@@ -246,7 +246,7 @@ class NAFNet(nn.Module):
         super().__init__()
         self.return_feat = return_feat
         self.intro = nn.Conv2d(in_channels=img_channel, out_channels=width, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
-        self.ending = nn.Conv2d(in_channels=width, out_channels=img_channel, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
+        self.ending = nn.Conv2d(in_channels=width, out_channels=3, kernel_size=3, padding=1, stride=1, groups=1, bias=True)
 
         self.encoders = nn.ModuleList()
         self.decoders = nn.ModuleList()
@@ -308,7 +308,7 @@ class NAFNet(nn.Module):
             x = decoder(x)
 
         x = self.ending(x)
-        x = x + inp
+        x = x + inp[:, :3]  # Only add the first 3 channels (SR image)
 
         return x[:, :, :H, :W]
 

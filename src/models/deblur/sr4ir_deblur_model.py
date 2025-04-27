@@ -10,7 +10,7 @@ from torch.nn.functional import interpolate
 from utils.common import save_on_master, quantize, calculate_psnr_batch, visualize_image, calculate_lpips_batch
 from utils.det import MetricLogger, SmoothedValue
 
-from ..base_model import BaseModel
+from .base_model import BaseModel
 
 
 def make_model(opt):
@@ -28,13 +28,13 @@ class SR4IRDeblurModel(BaseModel):
         
         # define network sr
         opt['network_sr']['scale'] = self.scale
-        self.net_sr = build_network(opt['network_sr'], self.text_logger, tag='net_sr')
+        self.net_sr = build_network(opt['network_sr'], self.text_logger, task='common', tag='net_sr')
         self.load_network(self.net_sr, name='network_sr', tag='net_sr')
         self.net_sr = self.model_to_device(self.net_sr, is_trainable=True)
         self.print_network(self.net_sr, tag='net_sr')
         
         # define network deblur
-        self.net_deblur = build_network(opt['network_deblur'], self.text_logger, task=self.task, tag='net_deblur')
+        self.net_deblur = build_network(opt['network_deblur'], self.text_logger, task='common', tag='net_deblur')
         self.load_network(self.net_deblur, name='network_deblur', tag='net_deblur')
         self.net_deblur = self.model_to_device(self.net_deblur, is_trainable=True)
         self.print_network(self.net_deblur, tag='net_deblur')
@@ -164,15 +164,11 @@ class SR4IRDeblurModel(BaseModel):
                 l_total_sr += l_pix
             if epoch > self.warmup_epoch:
                 if hasattr(self, 'cri_tdp'):
-                    self.net_deblur.eval()
-                    _, _, feat_sr = self.net_deblur(img_sr_list, return_feats=True)
-                    _, _, feat_hr = self.net_deblur(img_hr_list, return_feats=True)
-                    self.net_deblur.train()
-                    
-                    l_tdp = self.cri_tdp(feat_sr['features'], feat_hr['features'])
-                    metric_logger.meters["l_tdp"].update(l_tdp.item()) 
-                    self.tb_logger.add_scalar('losses/l_tdp', l_tdp.item(), current_iter)
-                    l_total_sr += l_tdp
+                    # Use perceptual loss
+                    percep_loss, _ = self.cri_tdp(img_sr_batch, img_hr_batch)
+                    metric_logger.meters["l_tdp"].update(percep_loss.item()) 
+                    self.tb_logger.add_scalar('losses/l_tdp', percep_loss.item(), current_iter)
+                    l_total_sr += percep_loss
             l_total_sr.backward()
             self.optimizer_sr.step()
             
@@ -184,24 +180,50 @@ class SR4IRDeblurModel(BaseModel):
             self.optimizer_deblur.zero_grad()
             l_total_deblur = 0
             if hasattr(self, 'cri_deblur_sr'):
-                _, loss_dict_sr = self.net_deblur(img_sr_list, target_list)
-                l_deblur_sr = self.cri_deblur_sr(loss_dict_sr)
+                # Concatenate SR and HR images for deblurring
+                img_sr_batch = self.list_to_batch(img_sr_list)
+                img_hr_batch = self.list_to_batch([t['sharp'] for t in target_list])
+                # Resize HR image to match SR image dimensions
+                img_hr_batch = F.interpolate(img_hr_batch, size=img_sr_batch.shape[2:], mode='bilinear', align_corners=False)
+                # Create CQMix image
+                batch_size = len(img_hr_list)
+                mask = interpolate((torch.randn(batch_size,1,8,8)).bernoulli_(p=0.5), size=(img_sr_batch.shape[2:]), mode='nearest').to(self.device)
+                img_cqmix_batch = img_sr_batch*mask + img_hr_batch*(1-mask)
+                # Concatenate all three images (SR, HR, CQMix)
+                img_input = torch.cat([img_sr_batch, img_hr_batch, img_cqmix_batch], dim=1)
+                output = self.net_deblur(img_input)
+                # Resize output back to HR dimensions for loss calculation
+                output = F.interpolate(output, size=img_hr_batch.shape[2:], mode='bilinear', align_corners=False)
+                l_deblur_sr = self.cri_deblur_sr(output, img_hr_batch)
                 metric_logger.meters["l_deblur_sr"].update(l_deblur_sr.item())
                 self.tb_logger.add_scalar('losses/l_deblur_sr', l_deblur_sr.item(), current_iter)
                 l_total_deblur += l_deblur_sr
             if hasattr(self, 'cri_deblur_hr'):
-                _, loss_dict_hr = self.net_deblur(img_hr_list, target_list)
-                l_deblur_hr = self.cri_deblur_hr(loss_dict_hr)
+                # Use HR images directly
+                img_hr_batch = self.list_to_batch([t['sharp'] for t in target_list])
+                # Create CQMix image for HR
+                batch_size = len(img_hr_list)
+                mask = interpolate((torch.randn(batch_size,1,8,8)).bernoulli_(p=0.5), size=(img_hr_batch.shape[2:]), mode='nearest').to(self.device)
+                img_cqmix_batch = img_hr_batch*mask + img_hr_batch*(1-mask)
+                # Concatenate HR and CQMix images
+                img_input = torch.cat([img_hr_batch, img_hr_batch, img_cqmix_batch], dim=1)
+                output = self.net_deblur(img_input)
+                l_deblur_hr = self.cri_deblur_hr(output, img_hr_batch)
                 metric_logger.meters["l_deblur_hr"].update(l_deblur_hr.item())
                 self.tb_logger.add_scalar('losses/l_deblur_hr', l_deblur_hr.item(), current_iter)
                 l_total_deblur += l_deblur_hr
             if hasattr(self, 'cri_deblur_cqmix'):
                 batch_size = len(img_hr_list)
-                mask = interpolate((torch.randn(batch_size,1,8,8)).bernoulli_(p=0.5), size=(img_hr_batch.shape[2:]), mode='nearest').to(self.device)
+                # Resize HR image to match SR image dimensions
+                img_hr_batch = F.interpolate(img_hr_batch, size=img_sr_batch.shape[2:], mode='bilinear', align_corners=False)
+                mask = interpolate((torch.randn(batch_size,1,8,8)).bernoulli_(p=0.5), size=(img_sr_batch.shape[2:]), mode='nearest').to(self.device)
                 img_cqmix_batch = img_sr_batch*mask + img_hr_batch*(1-mask)
-                img_cqmix_list = self.batch_to_list(img_cqmix_batch, img_list=img_hr_list)
-                _, loss_dict_cqmix = self.net_deblur(img_cqmix_list, target_list)
-                l_deblur_cqmix = self.cri_deblur_cqmix(loss_dict_cqmix)
+                # Concatenate SR, HR, and CQMix images
+                img_input = torch.cat([img_sr_batch, img_hr_batch, img_cqmix_batch], dim=1)
+                output = self.net_deblur(img_input)
+                # Resize output back to HR dimensions for loss calculation
+                output = F.interpolate(output, size=img_hr_batch.shape[2:], mode='bilinear', align_corners=False)
+                l_deblur_cqmix = self.cri_deblur_cqmix(output, img_hr_batch)
                 metric_logger.meters["l_deblur_cqmix"].update(l_deblur_cqmix.item())
                 self.tb_logger.add_scalar('losses/l_deblur_cqmix', l_deblur_cqmix.item(), current_iter)
                 l_total_deblur += l_deblur_cqmix
@@ -232,7 +254,7 @@ class SR4IRDeblurModel(BaseModel):
         header = "Test:"
         
         num_processed_samples = 0
-        for (img_hr_list, target_list), filename in metric_logger.log_every(data_loader_test, 1000, self.text_logger, header, return_filename=True):
+        for img_hr_list, target_list in metric_logger.log_every(data_loader_test, 1000, self.text_logger, header):
             img_hr_list = list(img_hr.to(self.device) for img_hr in img_hr_list)
             target_list = [{k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in target_list]
 
@@ -246,12 +268,28 @@ class SR4IRDeblurModel(BaseModel):
             
             # deblurring
             if torch.cuda.is_available(): torch.cuda.synchronize()
-            outputs_sr, _ = self.net_deblur(img_sr_list)
-            outputs_sr = [{k: v.to(torch.device("cpu")) for k, v in t.items()} for t in outputs_sr]
+            # Batch the SR images for deblurring
+            img_sr_batch = self.list_to_batch(img_sr_list)
+            img_hr_batch = self.list_to_batch([t['sharp'] for t in target_list])
+            # Resize HR image to match SR image dimensions
+            img_hr_batch = F.interpolate(img_hr_batch, size=img_sr_batch.shape[2:], mode='bilinear', align_corners=False)
+            # Create CQMix image
+            batch_size = len(img_hr_list)
+            mask = interpolate((torch.randn(batch_size,1,8,8)).bernoulli_(p=0.5), size=(img_sr_batch.shape[2:]), mode='nearest').to(self.device)
+            img_cqmix_batch = img_sr_batch*mask + img_hr_batch*(1-mask)
+            # Concatenate all three images (SR, HR, CQMix)
+            img_input = torch.cat([img_sr_batch, img_hr_batch, img_cqmix_batch], dim=1)
+            output = self.net_deblur(img_input)
+            # Resize output back to HR dimensions
+            output = F.interpolate(output, size=img_hr_batch.shape[2:], mode='bilinear', align_corners=False)
+            outputs_sr = self.batch_to_list(output, img_list=img_hr_list)
 
             # visualizing tool
-            if self.opt['test'].get('visualize', False):
-                self.visualize(img_sr_list[0], outputs_sr[0], filename)
+            if self.opt.get('test_only', False):
+                for i, (img_sr, output_sr) in enumerate(zip(img_sr_list, outputs_sr)):
+                    # Get the original filename from the dataset
+                    original_filename = os.path.splitext(os.path.basename(data_loader_test.dataset.image_list[num_processed_samples + i][1]))[0]
+                    self.visualize(img_sr, output_sr, original_filename)
 
             # evaluation on validation batch
             batch_size = len(img_sr_list)

@@ -7,10 +7,6 @@ import torch.utils.data as data
 from .deblur_dataset import DeblurDataset
 
 def load_data(opt):
-    """Load training and validation datasets."""
-    if opt['model_type'] == 'sr4ir_det':
-        return load_det_data(opt)
-    elif opt['model_type'] == 'sr4ir_deblur':
-        return load_deblur_data(opt)
-    else:
-        raise NotImplementedError(f"Model type {opt['model_type']} is not supported")
+    task = opt.get('task', 'cls').lower()
+    print('Data path: {}'.format(opt['data']['path']))
+    return eval(f"load_{task}_data")(opt)

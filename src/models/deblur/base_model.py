@@ -289,9 +289,7 @@ class BaseModel():
             net.load_state_dict(load_net, strict=strict)
         else:
             try:
-                load_net = torchvision.models.get_model(self.opt[name]['name'],
-                                                        weights=load_path,
-                                                        num_classes=self.opt[name]['num_classes']).state_dict()
+                load_net = torch.load(load_path, map_location=lambda storage, loc: storage)
                 self._print_different_keys_loading(net, load_net, strict)
                 net.load_state_dict(load_net, strict=strict)
                 self.text_logger.write(f'--> Load {tag} model from {load_path}.')
@@ -381,6 +379,43 @@ class BaseModel():
     def imwrite(self, img, name='img.png'):
         import cv2
         return cv2.imwrite(name, img.permute(1,2,0).detach().cpu().numpy()[:,:,::-1]*255)
+    
+    def visualize(self, img, output, filename, imwrite=True):
+        """Visualize the results.
+        
+        Args:
+            img (Tensor): Input image
+            output (Tensor): Output image
+            filename (str): Output filename
+            imwrite (bool): Whether to save the image
+        """
+        # Convert tensors to numpy arrays
+        img = img.permute(1,2,0).detach().cpu().numpy()
+        output = output.permute(1,2,0).detach().cpu().numpy()
+        
+        # Denormalize images
+        mean = np.array(self.opt['data']['mean']).reshape(1, 1, 3)
+        std = np.array(self.opt['data']['std']).reshape(1, 1, 3)
+        img = img * std + mean
+        output = output * std + mean
+        
+        # Clip values to [0, 1]
+        img = np.clip(img, 0, 1)
+        output = np.clip(output, 0, 1)
+        
+        # Convert to uint8
+        img = (img * 255).astype(np.uint8)
+        output = (output * 255).astype(np.uint8)
+        
+        # Create output directory
+        os.makedirs(osp.join(self.exp_dir, 'visualize'), exist_ok=True)
+        
+        # Save images
+        if imwrite:
+            cv2.imwrite(osp.join(self.exp_dir, 'visualize', f'{filename}_SR.png'), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            cv2.imwrite(osp.join(self.exp_dir, 'visualize', f'{filename}_HR.png'), cv2.cvtColor(output, cv2.COLOR_RGB2BGR))
+        
+        return output
     
     @torch.inference_mode()
     def calculate_cost(self):
