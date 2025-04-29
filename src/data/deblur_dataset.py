@@ -32,7 +32,7 @@ class DeblurDataset(data.Dataset):
         self.ids = [os.path.splitext(os.path.basename(path))[0] for path, _ in self.image_list]
         
         # Set max size for resizing
-        self.max_size = 150
+        self.max_size = 360  # Maximum dimension size
         
     def _get_image_list(self):
         """Get list of image pairs."""
@@ -80,7 +80,6 @@ class DeblurDataset(data.Dataset):
         
         # Create target dictionary with only tensor values
         target = {
-            'blurry': blurry_img,
             'sharp': sharp_img
         }
         
