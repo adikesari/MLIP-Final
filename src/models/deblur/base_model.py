@@ -380,14 +380,15 @@ class BaseModel():
         import cv2
         return cv2.imwrite(name, img.permute(1,2,0).detach().cpu().numpy()[:,:,::-1]*255)
     
-    def visualize(self, img, output, filename, imwrite=True):
+    def visualize(self, img, output, filename, imwrite=True, lr_img=None):
         """Visualize the results.
         
         Args:
-            img (Tensor): Input image
-            output (Tensor): Output image
+            img (Tensor): Input image (SR image)
+            output (Tensor): Output image (deblurred image)
             filename (str): Output filename
             imwrite (bool): Whether to save the image
+            lr_img (Tensor): Low resolution input image
         """
         # Convert tensors to numpy arrays
         img = img.permute(1,2,0).detach().cpu().numpy()
@@ -407,13 +408,31 @@ class BaseModel():
         img = (img * 255).astype(np.uint8)
         output = (output * 255).astype(np.uint8)
         
-        # Create output directory
-        os.makedirs(osp.join(self.exp_dir, 'visualize'), exist_ok=True)
+        # Create output directories
+        lr_dir = osp.join(self.exp_dir, 'visualize', 'lr_images')
+        sr_dir = osp.join(self.exp_dir, 'visualize', 'sr_images')
+        deblur_dir = osp.join(self.exp_dir, 'visualize', 'blurred_images')
+        os.makedirs(lr_dir, exist_ok=True)
+        os.makedirs(sr_dir, exist_ok=True)
+        os.makedirs(deblur_dir, exist_ok=True)
         
         # Save images
         if imwrite:
-            cv2.imwrite(osp.join(self.exp_dir, 'visualize', f'{filename}_SR.png'), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-            cv2.imwrite(osp.join(self.exp_dir, 'visualize', f'{filename}_HR.png'), cv2.cvtColor(output, cv2.COLOR_RGB2BGR))
+            # Save LR image if provided
+            if lr_img is not None:
+                # Remove batch dimension and convert to numpy
+                lr_img = lr_img.squeeze(0).permute(1,2,0).detach().cpu().numpy()
+                lr_img = lr_img * std + mean
+                lr_img = np.clip(lr_img, 0, 1)
+                # Upscale LR image to match SR/HR size
+                lr_img = cv2.resize(lr_img, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_CUBIC)
+                lr_img = (lr_img * 255).astype(np.uint8)
+                cv2.imwrite(osp.join(lr_dir, f'{filename}_LR.png'), cv2.cvtColor(lr_img, cv2.COLOR_RGB2BGR))
+            
+            # Save SR image
+            cv2.imwrite(osp.join(sr_dir, f'{filename}_SR.png'), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            # Save deblurred image
+            cv2.imwrite(osp.join(deblur_dir, f'{filename}_blurred.png'), cv2.cvtColor(output, cv2.COLOR_RGB2BGR))
         
         return output
     

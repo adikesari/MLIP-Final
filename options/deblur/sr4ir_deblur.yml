@@ -19,8 +19,8 @@ data:
   train:
     name: deblur_train
     type: DeblurDataset
-    batch_size: 4
-    num_workers: 4
+    batch_size: 8
+    num_workers: 8
     use_shuffle: true
     data_root: ./datasets/deblur/train
   val:
@@ -36,8 +36,8 @@ datasets:
   train:
     name: deblur_train
     type: DeblurDataset
-    batch_size: 4
-    num_workers: 4
+    batch_size: 8
+    num_workers: 8
     use_shuffle: true
     data_root: ./datasets/deblur/train
     mean: [0.4488, 0.4371, 0.4040]
@@ -62,7 +62,7 @@ network_sr:
 
 network_deblur:
   name: nafnet
-  img_channel: 9  # 3 channels each for SR, HR, and CQMix
+  img_channel: 3 
   width: 16
   middle_blk_num: 6
   enc_blk_nums: [1, 1, 2, 4]
@@ -76,40 +76,40 @@ path:
 
 # training config
 train:  
-  batch_size: 4  # 1 GPU
+  batch_size: 8  # Reduced from 4 to 2
   epoch: 30
   save_freq: 10  # unit: epoch
-  eval_freq: 10
+  eval_freq: 5
   warmup_epoch: 3
 
   # optimizer
   optim_sr:
     type: Adam
-    lr: !!float 1e-4
+    lr: !!float 5e-5
     weight_decay: 0
     betas: [0.9, 0.999]
   optim_deblur:
     type: Adam
-    lr: !!float 1e-4
+    lr: !!float 5e-5
     weight_decay: 0
     betas: [0.9, 0.999]
   
   # scheduler
   scheduler_sr:
     type: CosineAnnealingRestartLR
-    periods: [2, 27]  # 1 for warmup
+    periods: [2, 27]
     restart_weights: [1, 1]
     eta_min: !!float 1e-6
   scheduler_deblur:
     type: CosineAnnealingRestartLR
-    periods: [2, 27]  # 1 for warmup
+    periods: [2, 27]
     restart_weights: [1, 1]
     eta_min: !!float 1e-6
 
   # phase 1 losses
   pixel_opt:
-    type: L1Loss
-    loss_weight: !!float 1.0
+    type: MSELoss
+    loss_weight: !!float 2.0
     reduction: mean
   tdp_opt:
     type: PerceptualLoss
@@ -124,14 +124,14 @@ train:
   
   # phase 2 losses
   deblur_sr_opt:
-    type: L1Loss
-    loss_weight: !!float 0.34
+    type: MSELoss
+    loss_weight: !!float 0.25
   deblur_hr_opt:
-    type: L1Loss
-    loss_weight: !!float 0.34
+    type: MSELoss
+    loss_weight: !!float 0.5
   deblur_cqmix_opt:
-    type: L1Loss
-    loss_weight: !!float 0.34
+    type: MSELoss
+    loss_weight: !!float 0.25
 
 # training config
 test:  
@@ -150,7 +150,7 @@ broadcast_buffers: false
 # Device configuration
 device: cuda
 distributed: false
-gpu_ids: [0]  # Use first GPU, modify this list to use multiple GPUs
+gpu_ids: [0]  # Use only one GPU
 
 # Logging configurations
 logger:
