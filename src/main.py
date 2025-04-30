@@ -56,7 +56,9 @@ def main():
         
         for epoch in range(start_epoch, end_epoch+1):
             model.train_one_epoch(data_loader_train, train_sampler, epoch)
-            model.evaluate(data_loader_test, epoch)
+            # Only evaluate on validation set if eval_freq is set
+            if epoch % opt['train'].get('eval_freq', 1) == 0:
+                model.evaluate(data_loader_test, epoch)
             model.save(epoch)
             
         total_time = time.time() - start_time

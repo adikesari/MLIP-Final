@@ -80,6 +80,7 @@ class DeblurDataset(data.Dataset):
         
         # Create target dictionary with only tensor values
         target = {
+            'blurry': blurry_img,
             'sharp': sharp_img
         }
         
