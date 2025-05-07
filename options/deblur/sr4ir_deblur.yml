@@ -109,11 +109,11 @@ train:
   # phase 1 losses
   pixel_opt:
     type: MSELoss
-    loss_weight: !!float 1.0
+    loss_weight: !!float 0.6
     reduction: mean
   tdp_opt:
     type: L1Loss
-    loss_weight: !!float 1.0
+    loss_weight: !!float 0.4
     reduction: mean
   
   # phase 2 losses
