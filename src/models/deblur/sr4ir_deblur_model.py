@@ -199,7 +199,7 @@ class SR4IRDeblurModel(BaseModel):
             batch_size = len(blurry_list)
             mask = interpolate((torch.randn(batch_size,1,8,8)).bernoulli_(p=0.5), size=(img_sr_batch.shape[2:]), mode='nearest').to(self.device)
             img_cqmix_batch = img_sr_batch*mask + blurry_batch*(1-mask)
-
+            # Calculate SR loss
             if hasattr(self, 'cri_deblur_sr'):
                 output_sr = self.net_deblur(img_sr_batch)
                 output_sr = output_sr + img_sr_batch
@@ -207,15 +207,9 @@ class SR4IRDeblurModel(BaseModel):
                 metric_logger.meters["l_deblur_sr"].update(l_deblur_sr.item())
                 self.tb_logger.add_scalar('losses/l_deblur_sr', l_deblur_sr.item(), current_iter)
                 l_total_deblur += l_deblur_sr
-
-                # Add perceptual loss for SR output
-                if hasattr(self, 'cri_deblur_percep'):
-                    percep_loss_sr, _ = self.cri_deblur_percep(output_sr, sharp_batch)
-                    metric_logger.meters["l_percep_sr"].update(percep_loss_sr.item())
-                    self.tb_logger.add_scalar('losses/l_percep_sr', percep_loss_sr.item(), current_iter)
-                    l_total_deblur += percep_loss_sr
                 del output_sr
 
+            # Calculate HR loss
             if hasattr(self, 'cri_deblur_hr'):
                 output_hr = self.net_deblur(blurry_batch)
                 output_hr = output_hr + blurry_batch
@@ -225,6 +219,7 @@ class SR4IRDeblurModel(BaseModel):
                 l_total_deblur += l_deblur_hr
                 del output_hr
 
+            # Calculate CQMix loss
             if hasattr(self, 'cri_deblur_cqmix'):
                 output_cqmix = self.net_deblur(img_cqmix_batch)
                 output_cqmix = output_cqmix + img_cqmix_batch
@@ -232,6 +227,7 @@ class SR4IRDeblurModel(BaseModel):
                 metric_logger.meters["l_deblur_cqmix"].update(l_deblur_cqmix.item())
                 self.tb_logger.add_scalar('losses/l_deblur_cqmix', l_deblur_cqmix.item(), current_iter)
                 l_total_deblur += l_deblur_cqmix
+                del output_cqmix
 
             l_total_deblur.backward()
             self.optimizer_deblur.step()
