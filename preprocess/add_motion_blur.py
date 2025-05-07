@@ -27,12 +27,10 @@ def process_voc_dataset(input_dir, output_dir, image_list, blur_lengths=[5, 7, 9
     
     print(f"Processing {len(image_list)} images")
     
-    # Process each image
     for img_name in tqdm(image_list):
         img_name = img_name.strip()  # Remove newline
         img_path = os.path.join(input_dir, f"{img_name}.jpg")
         
-        # Read image
         img = cv2.imread(img_path)
         if img is None:
             print(f"Failed to read image: {img_path}")
@@ -42,16 +40,10 @@ def process_voc_dataset(input_dir, output_dir, image_list, blur_lengths=[5, 7, 9
         length = random.choice(blur_lengths)
         angle = random.choice(angles)
         
-        # Create blur kernel
+        # Apply motion blur
         kernel = create_motion_blur_kernel(length, angle)
-        
-        # Apply blur
         blurred_img = add_motion_blur(img, kernel)
-        
-        # Create output filename
         output_path = os.path.join(output_dir, f"{img_name}.jpg")
-        
-        # Create output directory if it doesn't exist
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         # Save blurred image
@@ -67,7 +59,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Read image list
     with open(args.image_list) as f:
         image_list = f.readlines()
     

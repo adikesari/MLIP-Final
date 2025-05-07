@@ -42,11 +42,9 @@ class BaseModel():
             mkdir_and_rename(osp.join('tb_loggers', self.task, opt['name']))
             self.tb_logger = TensorboardLogger(log_dir=osp.join('tb_loggers', self.task, opt['name']))
         else:
-            # ensure that output directory exists in evaluation only mode
             os.makedirs(self.exp_dir, exist_ok=True)
         self.text_logger = TextLogger(save=self.exp_dir, filename=filename)
         
-        # save environment settings
         if opt['dist']:
             self.dist = True
             self.text_logger.write('torchrun --nproc_per_node {} '.format(opt['world_size']) + ' '.join(sys.argv), print_log=False)
@@ -55,10 +53,8 @@ class BaseModel():
             self.text_logger.write('python ' + ' '.join(sys.argv), print_log=False)
         self.text_logger.write('Random seed : {}'.format(opt['manual_seed']))
             
-        # transform functions
         self.normalize = ManualNormalize()
         
-        # for lpips calculation
         if opt['test'].get('calculate_lpips', False):
             self.net_lpips = lpips.LPIPS(net='vgg').to(self.device)
 

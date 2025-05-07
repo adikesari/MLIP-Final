@@ -108,29 +108,23 @@ train:
 
   # phase 1 losses
   pixel_opt:
-    type: L1Loss
+    type: MSELoss
     loss_weight: !!float 1.0
     reduction: mean
   tdp_opt:
-    type: PerceptualLoss
-    perceptual_weight: !!float 1.0
-    style_weight: !!float 0.0
-    layer_weights:
-      conv5_4: 1.0
-    vgg_type: vgg19
-    use_input_norm: true
-    range_norm: false
-    criterion: l1
+    type: L1Loss
+    loss_weight: !!float 1.0
+    reduction: mean
   
   # phase 2 losses
   deblur_sr_opt:
-    type: L1Loss
+    type: MSELoss
     loss_weight: !!float 0.34
   deblur_hr_opt:
-    type: L1Loss
+    type: MSELoss
     loss_weight: !!float 0.34
   deblur_cqmix_opt:
-    type: L1Loss
+    type: MSELoss
     loss_weight: !!float 0.34
 
 # training config

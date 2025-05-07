@@ -13,12 +13,10 @@ class DeblurDataset(data.Dataset):
         super(DeblurDataset, self).__init__()
         self.opt = opt
         
-        # Set paths relative to project root
         self.data_root = opt['data_root']
         self.blurry_path = os.path.join(self.data_root, 'blurry_images')
         self.sharp_path = os.path.join(self.data_root, 'sharp_images')
-        
-        # Get image list
+
         self.image_list = self._get_image_list()
         print(f"Found {len(self.image_list)} image pairs in {self.data_root}")
         
@@ -28,10 +26,8 @@ class DeblurDataset(data.Dataset):
             transforms.Normalize(mean=opt['data']['mean'], std=opt['data']['std'])
         ])
         
-        # Set image IDs
         self.ids = [os.path.splitext(os.path.basename(path))[0] for path, _ in self.image_list]
         
-        # Set max size for resizing
         self.max_size = 360  # Maximum dimension size
         
     def _get_image_list(self):
@@ -54,11 +50,9 @@ class DeblurDataset(data.Dataset):
         """Get a pair of blurry and sharp images."""
         blurry_path, sharp_path = self.image_list[index]
         
-        # Load images
         blurry_img = Image.open(blurry_path).convert('RGB')
         sharp_img = Image.open(sharp_path).convert('RGB')
         
-        # Resize images while maintaining aspect ratio
         def resize_image(img):
             w, h = img.size
             if max(w, h) > self.max_size:
@@ -74,7 +68,7 @@ class DeblurDataset(data.Dataset):
         blurry_img = resize_image(blurry_img)
         sharp_img = resize_image(sharp_img)
         
-        # Apply transforms
+        # Transform images to tensors
         blurry_img = self.transform(blurry_img)
         sharp_img = self.transform(sharp_img)
         

@@ -9,16 +9,16 @@ This will:
 ## Blur Parameters
 
 Training set:
-- Blur lengths: [5, 9, 11] pixels
-- Angles: [0°, 45°, 90°]
+- Blur lengths: [5,7, 9, 11] pixels
+- Angles: [0, 45, 90,135]
 
 Validation set:
 - Blur lengths: [7, 9] pixels
-- Angles: [0°, 90°]
+- Angles: [0, 90]
 
 ## Customization
 
-You can modify the blur parameters by editing the `prepare_dataset.py` script:
+Modify the blur parameters by editing `prepare_dataset.py`
 - Change blur lengths
 - Modify angles
 - Add different blur types

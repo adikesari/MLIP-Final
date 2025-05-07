@@ -27,7 +27,6 @@ def download_voc_dataset(output_dir):
     return os.path.join(output_dir, "VOCdevkit", "VOC2012")
 
 def copy_original_images(input_dir, output_dir, image_list):
-    """Copy original images to the sharp_images folder."""
     print(f"Copying original images to {output_dir}...")
     os.makedirs(output_dir, exist_ok=True)
     
@@ -44,18 +43,13 @@ def main():
     voc_dir = base_dir / "VOC2012"
     deblur_dir = base_dir / "deblur"
     
-    # Download and extract VOC dataset
     voc_path = download_voc_dataset(str(voc_dir))
-    
-    # Create train and val directories
     train_dir = deblur_dir / "train"
     val_dir = deblur_dir / "val"
-    
-    # Create sharp_images directories
+
     train_sharp_dir = train_dir / "sharp_images"
     val_sharp_dir = val_dir / "sharp_images"
     
-    # Read train and val image lists
     train_list_path = os.path.join(voc_path, "ImageSets", "Main", "train.txt")
     val_list_path = os.path.join(voc_path, "ImageSets", "Main", "val.txt")
     
@@ -64,7 +58,6 @@ def main():
     with open(val_list_path) as f:
         val_images = f.readlines()
     
-    # Copy original images to sharp_images directories
     copy_original_images(
         os.path.join(voc_path, "JPEGImages"),
         str(train_sharp_dir),
@@ -76,7 +69,6 @@ def main():
         val_images
     )
     
-    # Process training set
     print("Processing training set...")
     process_voc_dataset(
         input_dir=os.path.join(voc_path, "JPEGImages"),
@@ -86,7 +78,6 @@ def main():
         angles=[0, 45, 90]
     )
     
-    # Process validation set
     print("Processing validation set...")
     process_voc_dataset(
         input_dir=os.path.join(voc_path, "JPEGImages"),
